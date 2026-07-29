@@ -1,0 +1,33 @@
+[Unit]
+Description=Claude Buddy bridge (M5StickC S3 over BLE)
+Documentation=file://@BRIDGE@/README.md
+
+# Deliberately no dependency on bluetooth.target: that is a *system* unit and
+# this is a *user* unit, so ordering between them is not something systemd will
+# honour. It does not matter - ble.py already retries every few seconds, so a
+# bridge that starts before the adapter is up simply connects a moment later.
+
+[Service]
+Type=simple
+WorkingDirectory=@BRIDGE@
+ExecStart=@BRIDGE@/.venv/bin/python @BRIDGE@/bridge.py --log-level INFO
+
+# The pet is meant to be there when you sit down. Restarting on a clean exit
+# too is intentional: `systemctl --user stop` still stops it, because systemd
+# tells an explicit stop apart from a process that ended on its own.
+Restart=always
+RestartSec=5
+
+# Journald handles output; bridge.py already timestamps its own lines.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cc-buddy
+
+# Modest hardening. Nothing stronger: the bridge needs the session D-Bus for
+# BlueZ, $XDG_RUNTIME_DIR for the status line socket, and ~/.claude to read
+# which sessions are alive.
+NoNewPrivileges=true
+PrivateTmp=false
+
+[Install]
+WantedBy=default.target

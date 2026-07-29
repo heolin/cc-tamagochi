@@ -1,0 +1,25 @@
+[project]
+name = "cc-bridge"
+version = "0.1.0"
+description = "Host side of the Claude buddy: Claude Code usage to an M5StickC S3 over BLE"
+requires-python = ">=3.11"
+
+# bleak is the only third-party dependency, and only bridge.py needs it.
+# statusline.py deliberately imports nothing outside the standard library so it
+# can run under the system interpreter - a broken venv must not be able to
+# break the prompt.
+dependencies = ["bleak>=0.22"]
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+# Nothing to package. These are scripts run in place from this directory, never
+# imported from anywhere else, and they sit flat rather than under a src/ tree.
+# Without this, setuptools finds eight top-level modules, refuses to guess which
+# belong in a distribution, and the install fails.
+#
+# The project file exists only to pin bleak, so `uv pip install -e .` resolves
+# the dependency and installs no code.
+py-modules = []
