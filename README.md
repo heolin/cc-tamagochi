@@ -271,3 +271,21 @@ fragmenting it.
 
 Tilt axes are measured, not derived — `tools/tilt_probe.py` shows all three
 axes live, which settles both the axis and its sign in one look.
+
+---
+
+## Credits
+
+The mascot artwork — all 29 poses in `device/raw_images/`, and the sprites
+converted from them — comes from the **Claude Mascot Pack** by
+[getillustrations.com](https://getillustrations.com/illustration-pack/claude-mascot-pack).
+Everything the buddy looks like is their work; this project only rescales it and
+draws it on a small screen.
+
+Check the pack's own terms before reusing the artwork elsewhere or making a copy
+of this repository public — the files here are redistributed as part of it.
+
+The protocol groundwork came from Anthropic's
+[claude-desktop-buddy](https://github.com/anthropics/claude-desktop-buddy), which
+is what suggested putting Claude on a stick in the first place. None of its code
+is used: this is a different idea on the same hardware.
