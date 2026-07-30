@@ -342,8 +342,8 @@ def apply_time(payload):
 # No built-in face carries anything outside 0x20-0x7F, and a missing glyph draws
 # as a replacement box rather than reporting an error (CLAUDE.md section 7). So
 # a name with diacritics is folded rather than shown as squares - wrong
-# spelling is at least readable. If proper diacritics ever matter, section 7 and
-# the root README document loading a custom .vlw font instead.
+# spelling is at least readable. If proper diacritics ever matter, section 7
+# documents loading a custom .vlw font instead.
 _FOLD = (
     ("ą", "a"), ("ć", "c"), ("ę", "e"), ("ł", "l"), ("ń", "n"),
     ("ó", "o"), ("ś", "s"), ("ź", "z"), ("ż", "z"),
