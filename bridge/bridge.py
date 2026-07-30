@@ -104,6 +104,8 @@ class Bridge:
                     # them and the device is not drawing them.
                     "five_hour": snap["five_hour"],
                     "seven_day": snap["seven_day"],
+                    "five_hour_reset_in": snap["five_hour_reset_in"],
+                    "seven_day_reset_in": snap["seven_day_reset_in"],
                     "usage_seen": len(self.state._usage),
                     "pose": snap["pose"],
                 },

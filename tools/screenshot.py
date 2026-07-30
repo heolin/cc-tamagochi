@@ -217,6 +217,8 @@ BASE = {
     "debt": 4480,
     "five_hour": 23,
     "seven_day": 41,
+    "five_hour_reset_in": 3 * 3600 + 42 * 60,
+    "seven_day_reset_in": 4 * 86400 + 9 * 3600,
     "sessions": {"total": 3, "busy": 1, "idle": 2},
     "taps_left": 53,
     "taps_total": 100,

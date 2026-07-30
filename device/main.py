@@ -581,6 +581,36 @@ def compact(number):
     return str(number)
 
 
+def hours_left(seconds):
+    """A countdown as '3:42h'. None when the bridge has no reset time.
+
+    Hours and minutes, never seconds: the window is five hours long, and a
+    ticking seconds field on a screen that repaints every few seconds would read
+    as noise rather than as information.
+    """
+    if seconds is None:
+        return None
+    seconds = int(seconds)
+    if seconds <= 0:
+        return "0:00h"
+    return "%d:%02dh" % (seconds // 3600, (seconds % 3600) // 60)
+
+
+def days_left(seconds):
+    """The weekly window as '4 days'.
+
+    Below a day it falls back to hours, because '0 days' is the one answer that
+    reads as broken rather than as nearly-there.
+    """
+    if seconds is None:
+        return None
+    seconds = int(seconds)
+    if seconds < 86400:
+        return hours_left(seconds)
+    days = seconds // 86400
+    return "%d day%s" % (days, "" if days == 1 else "s")
+
+
 def name_size(name):
     """Largest text size the name fits in, capped at 2."""
     Lcd.setTextSize(2)
@@ -709,20 +739,25 @@ def draw_header(index):
             Lcd.fillCircle(left + i * step, dot_y, 2, DARK)
 
 
-def draw_labelled_bar(y, label, value, colour, suffix="%"):
-    """A bar with its name above and its number on the right.
+def draw_labelled_bar(y, label, value, colour, suffix="%", resets=None):
+    """One limit: its name and number, when it rolls over, then the bar.
 
-    The bar hangs off the measured text height rather than a fixed offset, so
-    it keeps its distance if the caption ever changes size.
+    Everything hangs off the measured text height rather than fixed offsets, so
+    the block keeps its spacing if the captions ever change size.
+
+    The countdown sits between the caption and the bar on purpose. A limit is
+    two facts - how much is gone and how long until it comes back - and the
+    second is useless anywhere but next to the first.
     """
     # The caption sits five pixels below the block's reference line, which pulls
-    # it clear of whatever is above and closer to the bar it names - the two
-    # belong together, and the gap upwards is what separates one limit from the
-    # next.
-    label_y = y + 5
-    bar_y = y + Lcd.fontHeight() + 10
-
+    # it clear of whatever is above and closer to the bar it names - the three
+    # rows belong together, and the gap upwards is what separates one limit from
+    # the next.
     Lcd.setTextSize(1)
+    label_y = y + 5
+    reset_y = label_y + Lcd.fontHeight() + 2
+    bar_y = reset_y + Lcd.fontHeight() + 4
+
     Lcd.setTextColor(GREY, BLACK)
     Lcd.drawString(label, 6, label_y)
 
@@ -730,23 +765,36 @@ def draw_labelled_bar(y, label, value, colour, suffix="%"):
         Lcd.setTextColor(GREY, BLACK)
         Lcd.drawRightString("--", WIDTH - 6, label_y)
         draw_bar(6, bar_y, WIDTH - 12, BAR_H, 0.0, DARK)
-        return
+    else:
+        Lcd.setTextColor(colour, BLACK)
+        Lcd.drawRightString("%d%s" % (value, suffix), WIDTH - 6, label_y)
+        draw_bar(6, bar_y, WIDTH - 12, BAR_H, value / 100.0, colour)
 
-    Lcd.setTextColor(colour, BLACK)
-    Lcd.drawRightString("%d%s" % (value, suffix), WIDTH - 6, label_y)
-    draw_bar(6, bar_y, WIDTH - 12, BAR_H, value / 100.0, colour)
+    # Absent for the same reasons the percentage is - no subscription, or no API
+    # response yet - and absent on its own once a window has rolled over and
+    # nothing has reported since. "--" is a real state here too.
+    Lcd.setTextColor(GREY, BLACK)
+    Lcd.drawString("resets in", 6, reset_y)
+    Lcd.setTextColor(colour if resets else GREY, BLACK)
+    Lcd.drawRightString(resets or "--", WIDTH - 6, reset_y)
 
 
 def draw_claude(state):
     draw_header(SCREEN_CLAUDE)
 
-    draw_labelled_bar(34, "5 hour limit", state.get("five_hour"), BLUE)
-    draw_labelled_bar(74, "7 day limit", state.get("seven_day"), BODY)
+    draw_labelled_bar(
+        30, "5 hour limit", state.get("five_hour"), BLUE,
+        resets=hours_left(state.get("five_hour_reset_in")),
+    )
+    draw_labelled_bar(
+        86, "7 day limit", state.get("seven_day"), BODY,
+        resets=days_left(state.get("seven_day_reset_in")),
+    )
 
     sessions = state.get("sessions") or {}
     Lcd.setTextSize(1)
     Lcd.setTextColor(GREY, BLACK)
-    Lcd.drawString("sessions", 6, 120)
+    Lcd.drawCenterString("sessions", WIDTH // 2, 146)
 
     # Measured rather than hardcoded, same as the main screen: the caption sits
     # a fixed gap below whatever the big digit's height turns out to be.
@@ -754,7 +802,7 @@ def draw_claude(state):
     # The gap is zero because the size-2 digits carry their own padding - the
     # glyphs do not reach the bottom of their 16 px cell - so a metric gap on top
     # of that read as a gulf between the number and its name.
-    number_y = 136
+    number_y = 160
     Lcd.setTextSize(2)
     label_y = number_y + Lcd.fontHeight()
 
@@ -780,9 +828,9 @@ def draw_claude(state):
     # are what actually constrains the day.
     Lcd.setTextSize(1)
     Lcd.setTextColor(GREY, BLACK)
-    Lcd.drawString("tokens today", 6, 190)
+    Lcd.drawString("tokens today", 6, 212)
     Lcd.setTextColor(YELLOW, BLACK)
-    Lcd.drawRightString(compact(state.get("tokens_today", 0)), WIDTH - 6, 190)
+    Lcd.drawRightString(compact(state.get("tokens_today", 0)), WIDTH - 6, 212)
 
 
 # Below this the buddy is hungry enough to look it.

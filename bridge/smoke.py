@@ -35,6 +35,12 @@ from state import State  # noqa: E402
 
 STATUSLINE = os.path.join(HERE, "statusline.py")
 
+# The reset stamps are relative to now on purpose: the countdown the Claude
+# screen shows is the difference from the current time, so a fixed epoch would
+# only ever test the expired branch.
+FIVE_HOUR_RESET_IN = 3 * 3600 + 42 * 60
+SEVEN_DAY_RESET_IN = 4 * 86400
+
 FULL_EVENT = {
     "session_id": "sess-1",
     "cwd": "/home/wojciech/repo/m5stack",
@@ -46,8 +52,14 @@ FULL_EVENT = {
     },
     "cost": {"total_cost_usd": 0.0123},
     "rate_limits": {
-        "five_hour": {"used_percentage": 23.5, "resets_at": 1738425600},
-        "seven_day": {"used_percentage": 41.2, "resets_at": 1738857600},
+        "five_hour": {
+            "used_percentage": 23.5,
+            "resets_at": int(time.time()) + FIVE_HOUR_RESET_IN,
+        },
+        "seven_day": {
+            "used_percentage": 41.2,
+            "resets_at": int(time.time()) + SEVEN_DAY_RESET_IN,
+        },
     },
 }
 
@@ -128,11 +140,46 @@ async def main() -> int:
     check("snapshot carries a pose", bool(snap.get("pose")), f"got {snap.get('pose')!r}")
     check("five_hour present", snap["five_hour"] == 23.5, f"got {snap['five_hour']}")
 
+    # A couple of seconds of slack: the statusline subprocesses above are slow
+    # enough that an exact match would be flaky.
+    left = snap["five_hour_reset_in"]
+    check(
+        "five_hour counts down",
+        left is not None and abs(left - FIVE_HOUR_RESET_IN) <= 10,
+        f"got {left}, wanted about {FIVE_HOUR_RESET_IN}",
+    )
+    week = snap["seven_day_reset_in"]
+    check(
+        "seven_day counts down",
+        week is not None and abs(week - SEVEN_DAY_RESET_IN) <= 10,
+        f"got {week}, wanted about {SEVEN_DAY_RESET_IN}",
+    )
+
     print("\n-- 3. unknown limits are None, never 0 --")
     empty = State()
     empty_snap = empty.snapshot()
     check("five_hour is None", empty_snap["five_hour"] is None, f"got {empty_snap['five_hour']!r}")
     check("seven_day is None", empty_snap["seven_day"] is None, f"got {empty_snap['seven_day']!r}")
+    check(
+        "five_hour_reset_in is None",
+        empty_snap["five_hour_reset_in"] is None,
+        f"got {empty_snap['five_hour_reset_in']!r}",
+    )
+
+    # A window that rolled over with nothing reporting since: the percentage
+    # beside it is stale too, so the countdown must not show 0 as if it were a
+    # fresh reading.
+    expired = State()
+    expired.observe_usage({
+        "session_id": "old",
+        "five_hour_pct": 50.0,
+        "five_hour_reset": int(time.time()) - 120,
+    })
+    check(
+        "a past reset reads as unknown",
+        expired.snapshot()["five_hour_reset_in"] is None,
+        f"got {expired.snapshot()['five_hour_reset_in']!r}",
+    )
 
     print("\n-- 4. mood selection --")
     cases = (

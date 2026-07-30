@@ -205,8 +205,30 @@ class State:
                 best = (entry.seen_at, value)
         return best[1] if best else None
 
+    def _reset_in(self, attribute: str, now: float) -> int | None:
+        """Seconds until a limit window rolls over, or None if not known.
+
+        `resets_at` is an absolute epoch second, but the device shows a
+        countdown, so the subtraction happens here: the stick has no clock of
+        its own beyond what the bridge sets, and one side doing the arithmetic
+        means the two can never disagree about the hour.
+
+        A stamp already in the past means the window rolled over and no status
+        line has been drawn since - the percentage beside it is stale too, so
+        this reads as unknown rather than as zero.
+        """
+        stamp = self._limit(attribute)
+        if stamp is None:
+            return None
+        try:
+            remaining = int(stamp) - int(now)
+        except (TypeError, ValueError):
+            return None
+        return remaining if remaining > 0 else None
+
     def snapshot(self, now: float | None = None) -> dict:
         counts = sessions_mod.summarise(self.sessions)
+        moment = now if now is not None else time.time()
         game = self.game.view(now or time.time()) if self.game else self._fallback
 
         snap = {
@@ -229,6 +251,8 @@ class State:
             "cost": round(self.cost, 2),
             "five_hour": self._limit("five_hour_pct"),
             "seven_day": self._limit("seven_day_pct"),
+            "five_hour_reset_in": self._reset_in("five_hour_reset", moment),
+            "seven_day_reset_in": self._reset_in("seven_day_reset", moment),
             "sessions": {
                 "total": counts["total"],
                 "busy": counts["busy"],

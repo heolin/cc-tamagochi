@@ -12,7 +12,7 @@ only you can bring it back.
   &nbsp;&nbsp;
   <img src="docs/screens/level.png" width="200" alt="The level screen: level, progress bar, today's goals and click count">
   &nbsp;&nbsp;
-  <img src="docs/screens/claude.png" width="200" alt="The Claude screen: 5-hour and 7-day limit bars, live session counts, tokens today">
+  <img src="docs/screens/claude.png" width="200" alt="The Claude screen: 5-hour and 7-day limits with the time until each resets, live session counts, tokens today">
 </p>
 
 Nothing is flashed over the stock firmware: this is MicroPython running on top
@@ -132,10 +132,13 @@ done at midnight earns half a heart. Missing either costs a whole one.
 
 <img src="docs/screens/claude.png" width="180" align="right" alt="Claude screen">
 
-Your 5-hour and 7-day limits as bars, how many Claude Code sessions are alive
-and how many are busy, and today's tokens. `--` instead of a percentage means
-the limit is not known yet: it appears after the first API response of a
-session, and only on Pro and Max plans.
+Your 5-hour and 7-day limits as bars, each with how much is gone and how long
+until it comes back — `3:42h` for the session window, `4 days` for the weekly
+one. Below them: how many Claude Code sessions are alive, how many are busy, and
+today's tokens. `--` instead of a percentage means the limit is not known yet:
+it appears after the first API response of a session, and only on Pro and Max
+plans. The countdown can be `--` on its own too, once a window has rolled over
+and no status line has been drawn since.
 
 <br clear="right">
 

@@ -94,11 +94,16 @@ def show(state: dict) -> None:
     print(f"  goals    fed={goals['fed']} petted={goals['petted']}")
     print(f"  tokens   {state['tokens_today']} today")
 
-    def limit(name, value):
-        return f"{value:.0f}%" if value is not None else "unknown"
+    def limit(value, resets_in):
+        if value is None:
+            return "unknown"
+        if resets_in is None:
+            return f"{value:.0f}%"
+        hours, minutes = divmod(int(resets_in) // 60, 60)
+        return f"{value:.0f}%, resets in {hours}:{minutes:02d}h"
 
-    print(f"  5h limit {limit('5h', state.get('five_hour'))}")
-    print(f"  7d limit {limit('7d', state.get('seven_day'))}")
+    print(f"  5h limit {limit(state.get('five_hour'), state.get('five_hour_reset_in'))}")
+    print(f"  7d limit {limit(state.get('seven_day'), state.get('seven_day_reset_in'))}")
     print(f"  usage    reported by {state.get('usage_seen', 0)} session(s)")
     print(f"  pose     {state.get('pose')}")
     print(f"  device   {'connected' if state['connected'] else 'not connected'}")
