@@ -919,7 +919,10 @@ def draw_level(state, sprite):
     draw_bar(6, y, WIDTH - 12, BAR_H, progress, BODY)
     y += BAR_H + 5
     Lcd.setTextColor(GREY, BLACK)
-    Lcd.drawCenterString("%d%% to next" % int(progress * 100), centre, y)
+    # The bar fills with what has been earned; the caption is what is still
+    # missing. Both said "earned" before, so a bar at 42% was captioned "42% to
+    # next" - two readings of the same screen that contradict each other.
+    Lcd.drawCenterString("%d%% to next" % (100 - int(progress * 100)), centre, y)
 
     goals = state.get("goals") or {}
     Lcd.setTextColor(GREY, BLACK)
