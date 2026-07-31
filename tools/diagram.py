@@ -192,7 +192,7 @@ def compose(theme, scale):
     sheet.text(62, 330, "who is alive, who is busy", size=11, colour=dim)
 
     # -- column 2: the bridge ----------------------------------------------
-    sheet.text(COL2_X, 112, "BRIDGE  ·  systemd user unit, no root",
+    sheet.text(COL2_X, 112, "BRIDGE  ·  user service, no root",
                size=11, bold=True, colour=dim)
 
     sheet.card(COL2_X, 136, COL2_W, 268, accent=BODY)

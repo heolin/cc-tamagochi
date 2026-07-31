@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd's answer to bridge/cc-tamagochi.service.in. Installed by
+  ./deploy.sh service into ~/Library/LaunchAgents/, where a *user* agent runs as
+  you, with your session's Bluetooth permission and no root anywhere.
+
+  UNVERIFIED on hardware: written from launchd.plist(5) and never yet loaded on
+  a Mac. If the bridge does not come up, `launchctl print gui/$UID/cc-tamagochi`
+  says why, and the log paths below are the next place to look.
+
+  Two things differ from the systemd unit in ways worth knowing:
+
+  * There is no journal. launchd has no log collector, so stdout and stderr go
+    to files under ~/Library/Logs/ and nothing rotates them. bridge.py is not
+    chatty - a few lines a minute at INFO - but this is not free forever.
+  * The first BLE scan will raise a permission dialog, because macOS gates
+    Bluetooth per application and a background agent has no window to ask from.
+    Approving it once for the terminal or for python is what makes the agent
+    work afterwards; see the README.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>cc-tamagochi</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>@BRIDGE@/.venv/bin/python</string>
+    <string>@BRIDGE@/bridge.py</string>
+    <string>--log-level</string>
+    <string>INFO</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>@BRIDGE@</string>
+
+  <!-- The pet should be there when you sit down, and should come back if it
+       falls over. KeepAlive without conditions is launchd's Restart=always. -->
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+
+  <!-- systemd's RestartSec. Without it a process that fails at startup is
+       retried in a tight loop until launchd throttles it itself. -->
+  <key>ThrottleInterval</key>
+  <integer>5</integer>
+
+  <key>StandardOutPath</key>
+  <string>@HOME@/Library/Logs/cc-tamagochi.log</string>
+  <key>StandardErrorPath</key>
+  <string>@HOME@/Library/Logs/cc-tamagochi.log</string>
+
+  <!-- $TMPDIR is where paths.py puts the socket on macOS, and launchd hands
+       each agent the same per-user one it hands the login session, so the
+       status line and the daemon agree without either being told. -->
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>

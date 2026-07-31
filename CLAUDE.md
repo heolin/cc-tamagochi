@@ -63,6 +63,32 @@ changing anything under `bridge/`, it needs `systemctl --user restart
 cc-tamagochi`; `./deploy.sh service` re-installs the unit but will not restart a
 service that is already active.
 
+## Two platforms, one branch
+
+Linux is what this was built on; macOS is supported and **unverified on
+hardware**. Everything that differs lives in `bridge/host.py` (process liveness,
+runtime directory, serial port names) and `port.sh` (the same for the shell
+scripts). Do not add `sys.platform` or `uname` anywhere else - the point of
+those two files is that the list of differences is readable in one sitting.
+
+The pattern to follow when adding one: put the *logic* in a pure function that
+turns text into a value, and let only the *decision* between them look at the
+platform. A branch that never runs here is a branch that rots, so `smoke.py`
+feeds both parsers fixture strings and checks both regardless of the host OS.
+`runtime_dir()` and `serial_patterns()` take a `macos=` argument for the same
+reason.
+
+Two things genuinely cannot be settled from Linux, and both are marked
+**UNVERIFIED** in the code: whether BSD `ps -o lstart=` prints what the parser
+expects, and what Claude Code writes into `procStart` on macOS. If sessions
+count as zero on a Mac, start there.
+
+Do not name a module after a stdlib one. `bridge/host.py` was called
+`platform.py` for ten minutes, and since every script puts its own directory
+first on `sys.path`, it shadowed the real `platform` for the whole process -
+`import bleak` died inside `uuid` with `module 'platform' has no attribute
+'system'`.
+
 ## Critical gotchas
 
 ### 1. Always pass `resume`

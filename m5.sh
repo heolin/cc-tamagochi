@@ -9,10 +9,14 @@
 
 set -euo pipefail
 
-PORT="${M5_PORT:-/dev/ttyACM0}"
-WAIT_TIMEOUT=15
-
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+# Sets M5_PATTERN and defines find_port/no_port - /dev/ttyACM* on Linux,
+# /dev/cu.usbmodem* on macOS, M5_PORT overriding both.
+source "$REPO_ROOT/port.sh"
+PORT="$(find_port || true)"
+
+WAIT_TIMEOUT=15
 BACKUP_DIR="$REPO_ROOT/backup"
 
 usage() {
@@ -45,9 +49,12 @@ EOF
 # second or two later. Without this wait the next command races the kernel.
 wait_for_port() {
     local waited=0
-    while [[ ! -e "$PORT" ]]; do
+
+    # The node may come back under a different number, so this re-globs rather
+    # than waiting for the exact path that went away.
+    while ! PORT="$(find_port)"; do
         if (( waited >= WAIT_TIMEOUT )); then
-            echo "Timed out waiting for $PORT" >&2
+            echo "Timed out waiting for $M5_PATTERN" >&2
             return 1
         fi
         sleep 0.5
@@ -55,14 +62,16 @@ wait_for_port() {
     done
 
     if [[ ! -r "$PORT" || ! -w "$PORT" ]]; then
+        # Linux only: macOS puts the calling user on the node and has no
+        # dialout group, so there is nothing to join there.
         echo "Warning: $PORT is not readable/writable by you." >&2
-        echo "The node was just recreated as root:dialout - see README.md." >&2
+        echo "On Linux the node is root:dialout - see README.md." >&2
     fi
 }
 
 require_port() {
-    if [[ ! -e "$PORT" ]]; then
-        echo "No such port: $PORT - is the stick plugged in?" >&2
+    if [[ -z "$PORT" ]]; then
+        no_port
         exit 1
     fi
 }

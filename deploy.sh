@@ -129,17 +129,63 @@ do_app() {
 }
 
 # --- service ---------------------------------------------------------------
+#
+# Two service managers, one job: run bridge.py as you, at login, and restart it
+# if it dies. Neither half needs root - a systemd *user* unit and a launchd
+# *user agent* both run inside your own session, which is also where the
+# Bluetooth permission and $XDG_RUNTIME_DIR/$TMPDIR live.
 
 UNIT_DIR="$HOME/.config/systemd/user"
 UNIT="cc-tamagochi.service"
 
-do_service() {
-    say "Installing the systemd user unit"
+AGENT_DIR="$HOME/Library/LaunchAgents"
+AGENT="cc-tamagochi.plist"
 
+do_service() {
     if [[ ! -x "$BRIDGE/.venv/bin/python" ]]; then
         warn "no venv yet - run ./deploy.sh bridge first"
         return 1
     fi
+
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        do_service_launchd
+    else
+        do_service_systemd
+    fi
+}
+
+do_service_launchd() {
+    say "Installing the launchd user agent"
+    warn "UNVERIFIED: this path has never been run on a Mac - see the plist"
+
+    mkdir -p "$AGENT_DIR" "$HOME/Library/Logs"
+    sed -e "s|@BRIDGE@|$BRIDGE|g" -e "s|@HOME@|$HOME|g" \
+        "$BRIDGE/$AGENT.in" > "$AGENT_DIR/$AGENT"
+    echo "wrote $AGENT_DIR/$AGENT"
+
+    # bootout first so a re-run replaces the agent rather than failing on an
+    # already-loaded label. It fails when nothing is loaded, which is fine.
+    launchctl bootout "gui/$UID/cc-tamagochi" 2>/dev/null || true
+    launchctl bootstrap "gui/$UID" "$AGENT_DIR/$AGENT"
+    launchctl enable "gui/$UID/cc-tamagochi"
+
+    cat <<EOF
+
+  launchctl print gui/$UID/cc-tamagochi     what it is doing
+  tail -f ~/Library/Logs/cc-tamagochi.log   follow the log
+  launchctl kickstart -k gui/$UID/cc-tamagochi    restart after a change
+  launchctl bootout gui/$UID/cc-tamagochi         stop and unload
+
+The first Bluetooth scan raises a permission dialog. A background agent has no
+window to ask from, so approve it once by running the bridge in a terminal:
+
+  cd $BRIDGE && .venv/bin/python bridge.py --log-level DEBUG
+
+EOF
+}
+
+do_service_systemd() {
+    say "Installing the systemd user unit"
 
     mkdir -p "$UNIT_DIR"
     # Paths are substituted rather than hardcoded so moving the repo is a

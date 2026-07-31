@@ -24,7 +24,7 @@ work at any time.
 ## What you need
 
 - An **M5StickC S3** running UIFlow2 (any recent version; tested on v2.4.5)
-- **Linux** with Bluetooth — the bridge uses BlueZ
+- **Linux** with Bluetooth (BlueZ), or **macOS** — see [the note below](#on-macos)
 - **Claude Code**, on a Pro or Max plan if you want the rate-limit bars
 - [`uv`](https://docs.astral.sh/uv/) and [`mpremote`](https://docs.micropython.org/en/latest/reference/mpremote.html)
   (`uv tool install mpremote`)
@@ -72,13 +72,20 @@ sudo loginctl enable-linger $USER
 
 ### Running the service
 
-It is a systemd **user** unit, so none of this needs root:
+It is a **user** service on both platforms, so none of this needs root:
 
 ```bash
+# Linux (systemd)
 systemctl --user status cc-tamagochi     # is it up, is it connected
 journalctl --user -u cc-tamagochi -f     # follow the log
 systemctl --user restart cc-tamagochi    # after any change under bridge/
 systemctl --user disable --now cc-tamagochi
+
+# macOS (launchd)
+launchctl print gui/$UID/cc-tamagochi
+tail -f ~/Library/Logs/cc-tamagochi.log
+launchctl kickstart -k gui/$UID/cc-tamagochi
+launchctl bootout gui/$UID/cc-tamagochi
 ```
 
 **A restart is what applies a change.** The daemon loads `buddy_config.json`
@@ -95,6 +102,39 @@ pet as offline for a second or two and picks up again on the next heartbeat.
 Changes to `device/main.py` are a different cycle entirely — `device/run.sh` for
 a quick try, `device/deploy_app.sh` to write it to flash. The bridge does not
 need to know.
+
+### On macOS
+
+Everything is in the same branch and picks itself at runtime; there is no
+separate port to check out. Four things differ, and they are gathered in
+[`bridge/host.py`](bridge/host.py) and [`port.sh`](port.sh) rather than
+sprinkled through the code:
+
+| | Linux | macOS |
+|---|---|---|
+| Is this session alive? | `/proc/<pid>/stat` | `ps -o lstart=` |
+| Socket directory | `$XDG_RUNTIME_DIR` | `$TMPDIR` (per-user, not `/tmp`) |
+| Serial port | `/dev/ttyACM*` | `/dev/cu.usbmodem*` |
+| Service manager | systemd user unit | launchd user agent |
+
+The BLE link is not on that list: the bridge now finds the stick by the name it
+advertises (`Claude-XXXX`) rather than by a hard-coded address, because **macOS
+never exposes MAC addresses** — CoreBluetooth substitutes a UUID that differs
+per host. Scanning by name is also what makes a replacement board work without
+editing anything. `--address` still pins a particular stick if you have two.
+
+**Honest status: the macOS paths are written but have never run on a Mac.** The
+logic is covered by tests on both sides — `smoke.py` parses fixture output from
+both `ps` and `/proc` whatever it runs on — but two things can only be confirmed
+on the hardware: that `ps -o lstart=` prints what the parser expects, and that
+what Claude Code stores in each session file's `procStart` on macOS is the same
+string. If live sessions show as zero, that is the first place to look. Every
+unverified branch says so in a comment.
+
+Expect one extra step there: the first BLE scan raises a **Bluetooth permission
+dialog**, and a launchd agent has no window to show it in. Run the bridge once
+in a terminal (`cd bridge && .venv/bin/python bridge.py --log-level DEBUG`),
+approve it, and the agent works from then on.
 
 ## Using it
 
@@ -298,7 +338,8 @@ HTTP client anywhere in `bridge/`, and the daemon's single outbound connection
 is BLE to one hard-coded address. On disk it writes one file, `buddy.json`,
 which holds counters — see `game.Snapshot` for its complete schema.
 
-**No root.** `./deploy.sh service` installs a systemd *user* unit. The local
+**No root.** `./deploy.sh service` installs a *user* service — a systemd user
+unit on Linux, a launchd user agent on macOS. The local
 socket lives in `$XDG_RUNTIME_DIR` (0700) with mode 0600 on top.
 
 The one honest caveat: **the BLE link is unencrypted and unpaired**, like most
@@ -317,6 +358,7 @@ the two inputs the device accepts, and award your pet an undeserved petting.
 | `bridge/state.py` | usage aggregation, mood and pose selection |
 | `bridge/statusline.py` | one shot per prompt redraw, standard library only |
 | `bridge/configure.py` | four questions to `buddy_config.json`, no venv needed |
+| `bridge/host.py` | every difference between Linux and macOS, in one file |
 | `tools/sprite_convert.py` | PNG → the device's sprite format |
 | `tools/screenshot.py` | the images in this README, drawn by the real code |
 | `tools/*_probe.py` | what this board can actually do, measured |

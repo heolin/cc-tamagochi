@@ -32,7 +32,8 @@ check rather than take on faith - every line below is one `grep` away:
   on it, and never asks it anything: the status line writes to a socket with a
   0.15 s timeout and prints its line whatever happens. A wedged or missing
   daemon leaves the pet stale and the CLI untouched.
-* **It needs no root.** `./deploy.sh service` installs a systemd *user* unit.
+* **It needs no root.** `./deploy.sh service` installs a *user* service: a
+  systemd user unit on Linux, a launchd user agent on macOS.
 
 What crosses the radio is the snapshot in `state.snapshot()`: hunger, hearts,
 level, token counts, session counts, pose names. No paths, no project names, no
@@ -50,7 +51,7 @@ import os
 import signal
 import time
 
-from ble import DEFAULT_ADDRESS, BuddyLink
+from ble import BuddyLink
 from game import Game
 from ipc import ControlServer
 from state import State
@@ -276,7 +277,11 @@ class Bridge:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Claude buddy bridge")
-    parser.add_argument("--address", default=DEFAULT_ADDRESS, help="the buddy's BLE address")
+    # No default: without one the link scans for a device called Claude-XXXX,
+    # which is the only thing that works on macOS and the more portable answer
+    # everywhere. Pass an address to pin a particular stick.
+    parser.add_argument("--address", default=None,
+                        help="connect to this BLE address instead of scanning by name")
     parser.add_argument("--log-level", default="INFO")
     args = parser.parse_args()
 

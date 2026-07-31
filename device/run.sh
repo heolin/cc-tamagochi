@@ -6,11 +6,11 @@
 
 set -euo pipefail
 
-PORT="${M5_PORT:-/dev/ttyACM0}"
 cd "$(dirname "$0")"
+source ../port.sh
 
-if [[ ! -e "$PORT" ]]; then
-    echo "No such port: $PORT - is the stick plugged in?" >&2
+if ! PORT="$(find_port)"; then
+    no_port
     exit 1
 fi
 

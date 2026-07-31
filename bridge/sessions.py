@@ -31,6 +31,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+import host
+
 log = logging.getLogger(__name__)
 
 SESSIONS_DIR = Path.home() / ".claude" / "sessions"
@@ -59,32 +61,21 @@ class Session:
         return self.status == "busy"
 
 
-def _proc_start_ticks(pid: int) -> str | None:
-    """Field 22 of /proc/<pid>/stat: when the process started, in clock ticks.
-
-    Claude Code records this alongside the pid, and the reason is pid reuse -
-    after a reboot or a busy day, some unrelated process can inherit the number.
-    Comparing start times is what makes the check trustworthy.
-    """
-    try:
-        with open(f"/proc/{pid}/stat", "rb") as handle:
-            raw = handle.read()
-    except OSError:
-        return None
-
-    # The comm field is parenthesised and may itself contain spaces, so split
-    # after the closing bracket rather than on whitespace from the start.
-    try:
-        tail = raw[raw.rindex(b")") + 2 :].split()
-        return tail[19].decode()
-    except (ValueError, IndexError):
-        return None
-
-
 def _alive(pid: int, proc_start: str | None) -> bool:
+    """Is this session's process still the one that wrote the file?
+
+    Two questions, and the second is the one that matters. A pid that exists is
+    not proof: after a reboot or a busy day some unrelated process inherits the
+    number, and a pet reporting a crowd of sessions that are really someone
+    else's compiler is worse than a pet reporting none.
+
+    Claude Code records the process's start time beside the pid for exactly this
+    reason. `host.process_started_at` knows how to ask the local OS - the format
+    differs per platform and is compared as opaque text, never interpreted.
+    """
     if pid <= 0:
         return False
-    actual = _proc_start_ticks(pid)
+    actual = host.process_started_at(pid)
     if actual is None:
         return False
     if proc_start and actual != str(proc_start):

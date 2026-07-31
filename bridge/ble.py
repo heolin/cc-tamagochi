@@ -36,15 +36,28 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 
-from bleak import BleakClient
+import host
+from bleak import BleakClient, BleakScanner
 
 log = logging.getLogger(__name__)
 
 NUS_RX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e"  # we write here
 NUS_TX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e"  # the stick notifies here
 
-# The stick's address is known, so discovery is skipped entirely.
+# This particular stick, as a shortcut: connecting straight to a known address
+# skips a five-second scan on every reconnect. It is a hint, not a requirement -
+# see `_find_device`.
 DEFAULT_ADDRESS = "98:88:E0:0E:8C:CE"
+
+# What the device calls itself: `NAME_PREFIX` in device/main.py, plus two bytes
+# of its own MAC. Matching on the prefix finds any buddy, including a second
+# stick or a replacement board.
+NAME_PREFIX = "Claude-"
+
+# Long enough for a peripheral advertising at 100 ms to be seen several times
+# over, short enough that a stick which is simply switched off does not hold the
+# reconnect loop for a noticeable pause.
+SCAN_TIMEOUT = 6.0
 
 HEARTBEAT_INTERVAL = 3.0
 
@@ -71,11 +84,16 @@ class BuddyLink:
         self,
         on_line: LineHandler,
         snapshot: Callable[[], dict],
-        address: str = DEFAULT_ADDRESS,
+        address: str | None = None,
     ) -> None:
         self._on_line = on_line
         self._snapshot = snapshot
+
+        # An address given on the command line is an instruction and is obeyed.
+        # Without one, `_find_device` decides - and on macOS it has to, because
+        # CoreBluetooth never hands out MAC addresses.
         self._address = address
+        self._found: object | None = None  # a BLEDevice, once discovery works
 
         self._client: BleakClient | None = None
         self._rx = bytearray()
@@ -105,6 +123,12 @@ class BuddyLink:
             self._client = None
             self._rx = bytearray()
 
+            # Forget where it was. A cached device that has stopped answering is
+            # the one thing a reconnect loop cannot fix by trying harder - the
+            # stick may have reset, and on macOS the identifier can change with
+            # it. The next pass scans again.
+            self._found = None
+
             if self._stop.is_set():
                 return
 
@@ -114,10 +138,57 @@ class BuddyLink:
             except asyncio.TimeoutError:
                 pass
 
-    async def _session(self) -> None:
-        log.info("connecting to %s", self._address)
+    async def _find_device(self):
+        """What to hand BleakClient: an address, or a device found by scanning.
 
-        async with BleakClient(self._address) as client:
+        Three cases, in the order they are cheapest:
+
+        * **An address was given.** Obey it. `--address` exists for the person
+          with two sticks on one desk, and guessing over them would be rude.
+        * **We found one before.** Reuse it; a reconnect after the stick reset
+          should not cost another scan.
+        * **Otherwise, scan for the name.** The device advertises `Claude-XXXX`
+          (`NAME_PREFIX` in device/main.py), which is portable in a way an
+          address is not: **macOS never exposes MAC addresses at all** - Core
+          Bluetooth substitutes a UUID that differs per host - so on a Mac the
+          hard-coded `DEFAULT_ADDRESS` identifies nothing, and scanning is the
+          only way in. On Linux the address still works, and is tried first as
+          a hint before falling back to the same scan.
+        """
+        if self._address:
+            return self._address
+        if self._found is not None:
+            return self._found
+
+        if not host.MACOS:
+            # Cheap and usually right on the machine this was built on. If the
+            # stick has been replaced the connection fails, and the next pass
+            # through the loop scans instead - one wasted attempt, once.
+            log.debug("trying the known address %s before scanning", DEFAULT_ADDRESS)
+            if await BleakScanner.find_device_by_address(
+                DEFAULT_ADDRESS, timeout=SCAN_TIMEOUT
+            ):
+                return DEFAULT_ADDRESS
+
+        log.info("scanning for a device called %s*", NAME_PREFIX)
+        device = await BleakScanner.find_device_by_filter(
+            lambda dev, adv: (dev.name or "").startswith(NAME_PREFIX),
+            timeout=SCAN_TIMEOUT,
+        )
+        if device is None:
+            raise RuntimeError(
+                f"no {NAME_PREFIX}* device in range - is the stick running the buddy?"
+            )
+
+        log.info("found %s at %s", device.name, device.address)
+        self._found = device
+        return device
+
+    async def _session(self) -> None:
+        target = await self._find_device()
+        log.info("connecting to %s", getattr(target, "address", target))
+
+        async with BleakClient(target) as client:
             self._client = client
             self._write_failures = 0
             log.info("connected, mtu=%s", getattr(client, "mtu_size", "?"))

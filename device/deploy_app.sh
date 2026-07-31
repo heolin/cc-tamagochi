@@ -19,19 +19,19 @@
 
 set -euo pipefail
 
-PORT="${M5_PORT:-/dev/ttyACM0}"
 cd "$(dirname "$0")"
+source ../port.sh
 
 M5="../m5.sh"
 BACKUP_DIR="backup"
 BACKUP_FILE="$BACKUP_DIR/main.py.orig"
 
-MP=(mpremote connect "$PORT" resume)
-
-if [[ ! -e "$PORT" ]]; then
-    echo "No such port: $PORT - is the stick plugged in?" >&2
+if ! PORT="$(find_port)"; then
+    no_port
     exit 1
 fi
+
+MP=(mpremote connect "$PORT" resume)
 
 # --- restore ---------------------------------------------------------------
 

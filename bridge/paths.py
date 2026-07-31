@@ -6,19 +6,23 @@ questions on it, `bridge.py` listens on it.
 
 Deliberately stdlib-only. `statusline.py` runs under the system interpreter -
 whatever Claude Code's `statusLine` command points at - and importing anything
-from a venv here would let a broken venv blank the prompt.
+from a venv here would let a broken venv blank the prompt. `host` is a sibling
+file with the same rule, so importing it costs nothing.
 """
 
 import os
+
+import host
 
 
 def socket_path() -> str:
     """AF_UNIX path for the statusline <-> daemon channel.
 
-    `$XDG_RUNTIME_DIR` is per-user, tmpfs-backed, mode 0700 and cleaned up at
-    logout, which is what this wants: the directory alone already keeps other
-    users out, and `ipc.py` adds 0600 on the socket itself. Nothing here ever
-    reaches the disk, so there is no file to forget about tomorrow.
+    `host.runtime_dir()` finds the platform's private per-user directory -
+    `$XDG_RUNTIME_DIR` on Linux, `$TMPDIR` on macOS, both 0700 and cleaned up at
+    logout. That is what this wants: the directory alone already keeps other
+    users out, and `ipc.py` adds 0600 on the socket itself. Neither reaches the
+    disk, so there is no file to forget about tomorrow.
 
     The `/tmp` fallback carries the uid so two users on one machine cannot
     collide - or squat on each other's path.
@@ -31,7 +35,7 @@ def socket_path() -> str:
     if override:
         return override
 
-    runtime = os.environ.get("XDG_RUNTIME_DIR")
-    if runtime and os.path.isdir(runtime):
+    runtime = host.runtime_dir()
+    if runtime:
         return os.path.join(runtime, "cc-buddy.sock")
     return "/tmp/cc-buddy-%d.sock" % os.getuid()

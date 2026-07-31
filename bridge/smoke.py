@@ -30,6 +30,7 @@ sys.path.insert(0, HERE)
 os.environ["CC_BUDDY_SOCKET"] = "/tmp/cc-buddy-smoke-%d.sock" % os.getpid()
 
 import configure  # noqa: E402
+import host  # noqa: E402
 import sessions as sessions_mod  # noqa: E402
 import state as st  # noqa: E402
 from ipc import ControlServer  # noqa: E402
@@ -301,6 +302,59 @@ async def main() -> int:
           configure.current({}) == {"name": "KLAUDIUSZ", "daily_tokens": 48_000,
                                     "hours_to_starve": 12, "days_of_neglect": 5},
           f"got {configure.current({})}")
+
+    print("\n-- 9. both platforms, from one machine --")
+    # The point of host.py is that the branch which does not run here is still
+    # tested here. These call the macOS side on Linux and the Linux side
+    # unconditionally: what cannot be checked without a Mac is whether the real
+    # `ps` prints what the fixture says, not whether the code handles it.
+
+    # A real line, with the trap in it: `comm` is parenthesised and can contain
+    # both spaces and brackets, so field 22 cannot be found by counting from
+    # the left.
+    stat_line = (
+        b"13388 (claude (dev)) S 1 13388 13388 0 -1 4194560 12345 0 0 0 "
+        b"120 34 0 0 20 0 12 0 436235 " + b"0 " * 30
+    )
+    check("proc stat: field 22 past a bracketed comm",
+          host._parse_proc_stat(stat_line) == "436235",
+          f"got {host._parse_proc_stat(stat_line)!r}")
+    check("proc stat: junk is None, not a crash",
+          host._parse_proc_stat(b"nonsense") is None,
+          f"got {host._parse_proc_stat(b'nonsense')!r}")
+
+    # BSD `ps -o lstart=` pads short day numbers, so the same process would
+    # otherwise compare unequal to itself across a month boundary.
+    check("ps lstart: padding collapses",
+          host._parse_ps_lstart("Thu Jul  3 09:14:22 2026") == "Thu Jul 3 09:14:22 2026",
+          f"got {host._parse_ps_lstart('Thu Jul  3 09:14:22 2026')!r}")
+    check("ps lstart: no output is None",
+          host._parse_ps_lstart("  \n") is None,
+          f"got {host._parse_ps_lstart('  ')!r}")
+
+    check("this process is alive to the local OS",
+          host.process_started_at(os.getpid()) is not None)
+    check("pid 0 is nobody", host.process_started_at(0) is None)
+
+    check("linux runtime dir is XDG",
+          host.runtime_dir({"XDG_RUNTIME_DIR": HERE}, macos=False) == HERE,
+          f"got {host.runtime_dir({'XDG_RUNTIME_DIR': HERE}, macos=False)!r}")
+    check("macos runtime dir is TMPDIR",
+          host.runtime_dir({"TMPDIR": HERE}, macos=True) == HERE,
+          f"got {host.runtime_dir({'TMPDIR': HERE}, macos=True)!r}")
+    # A TMPDIR of /tmp is the shared directory wearing the variable's name.
+    check("macos ignores a TMPDIR of /tmp",
+          host.runtime_dir({"TMPDIR": "/tmp"}, macos=True) is None,
+          f"got {host.runtime_dir({'TMPDIR': '/tmp'}, macos=True)!r}")
+    check("no variable set means the /tmp fallback",
+          host.runtime_dir({}, macos=False) is None and host.runtime_dir({}, macos=True) is None)
+
+    check("macos serial ports are cu, not tty",
+          host.serial_patterns(macos=True) == ("/dev/cu.usbmodem*",),
+          f"got {host.serial_patterns(macos=True)}")
+    check("linux serial ports are ttyACM",
+          host.serial_patterns(macos=False) == ("/dev/ttyACM*",),
+          f"got {host.serial_patterns(macos=False)}")
 
     failed = [r for r in results if not r[1]]
     print(f"\n== {len(results) - len(failed)}/{len(results)} passed ==")
