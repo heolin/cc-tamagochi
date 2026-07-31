@@ -233,7 +233,21 @@ def pose_name(filename: str) -> str:
 
 def load_all(directory: str):
     frames = {}
-    names = sorted(f for f in os.listdir(directory) if f.endswith(".png"))
+    try:
+        names = sorted(f for f in os.listdir(directory) if f.endswith(".png"))
+    except OSError:
+        names = []
+
+    # The artwork is not redistributable, so a clean checkout has the converted
+    # sprites but none of the sources. That is a normal state, not a broken
+    # install - say so rather than dying on an empty dict three functions later.
+    if not names:
+        raise SystemExit(
+            f"no PNGs in {directory}\n"
+            "The mascot pack is not committed - see device/raw_images/README.md.\n"
+            "device/sprites/*.spr is committed, so ./deploy.sh sprites works without it."
+        )
+
     for filename in names:
         name = pose_name(filename)
         grid, info = normalise(os.path.join(directory, filename))

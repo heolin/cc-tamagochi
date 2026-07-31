@@ -36,13 +36,23 @@ warn() { printf '\033[33m!! %s\033[0m\n' "$1"; }
 # --- sprites ---------------------------------------------------------------
 
 do_sprites() {
-    say "Converting sprites"
-    if ! python3 -c "import PIL" 2>/dev/null; then
-        warn "Pillow missing. Install it with:  uv pip install --system pillow"
-        warn "or run:  cd $BRIDGE && uv pip install pillow"
-        return 1
+    # The converted .spr files are committed and the source PNGs are not - the
+    # mascot pack is licensed to whoever downloaded it (device/raw_images/
+    # README.md). So conversion is the optional half: without the artwork this
+    # uploads what is already in the repo, which is the common case.
+    if ls "$BUDDY"/raw_images/*.png >/dev/null 2>&1; then
+        say "Converting sprites"
+        if ! python3 -c "import PIL" 2>/dev/null; then
+            warn "Pillow missing. Install it with:  uv pip install --system pillow"
+            warn "or run:  cd $BRIDGE && uv pip install pillow"
+            return 1
+        fi
+        python3 "$REPO/tools/sprite_convert.py" --write "$BUDDY/sprites" | tail -3
+    else
+        say "Using the committed sprites"
+        echo "No source artwork in device/raw_images - see its README.md."
+        echo "Nothing to convert; $(ls -1 "$BUDDY"/sprites/*.spr | wc -l) .spr files are already in the repo."
     fi
-    python3 "$REPO/tools/sprite_convert.py" --write "$BUDDY/sprites" | tail -3
 
     say "Uploading sprites to the board"
     "$BUDDY/deploy_sprites.sh"
