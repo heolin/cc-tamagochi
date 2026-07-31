@@ -24,6 +24,23 @@ redraw; one that raises would leave it blank.
 
 Standard library only, and run by the system interpreter - a broken venv must
 not be able to break the prompt.
+
+## The one piece of this project that Claude Code runs
+
+Everything else here watches from outside; this file is invoked by the CLI
+itself, so it is the only place that could slow anyone down. Three deliberate
+limits keep that from mattering:
+
+* It **forwards a fixed subset** of the event, chosen by `pick()`. Not the
+  event, not whatever a future CLI adds to it.
+* It **never waits**: `SEND_TIMEOUT` is 0.15 s and the socket is connect-and-
+  forget. A daemon that is down, wedged or missing costs one status line's worth
+  of latency at most.
+* It **cannot fail loudly**: every path prints something, including the
+  catch-all in `__main__`. A status line that raises leaves the prompt blank.
+
+It has no side effects beyond that write - nothing is stored, nothing is
+appended, no file is opened for writing anywhere in this file.
 """
 
 from __future__ import annotations
@@ -72,6 +89,21 @@ def pick(event: dict) -> dict:
     API response of a session, and each window can be missing on its own. Every
     field here is therefore optional - the pet must show "unknown", never a
     confident 0.
+
+    This is an allowlist, not a filter: the daemon gets exactly the keys built
+    below and nothing else, so a field added to the status-line event upstream
+    stays where it is until someone here decides the pet needs it.
+
+    What is deliberately left behind, though the event offers it: the transcript
+    path, the working directory, the session's version and output style, and
+    everything else about the workspace. `cwd` used to be forwarded and nothing
+    ever read it - `Usage` has no field for it - so it went out of the payload
+    rather than sitting in a socket for no reason. `sessions.py` gets its own
+    project names from the session files, and neither name reaches the stick.
+
+    The `session_id` is here because usage has to be accumulated per session (a
+    single shared counter would double-count two terminals); it is the CLI's own
+    UUID and identifies nothing else.
     """
     limits = event.get("rate_limits") or {}
     five = limits.get("five_hour") or {}
@@ -83,7 +115,6 @@ def pick(event: dict) -> dict:
     out = {
         "kind": "usage",
         "session_id": event.get("session_id") or "",
-        "cwd": event.get("cwd") or "",
         "model": model.get("display_name") or model.get("id") or "",
         "output_tokens": context.get("total_output_tokens"),
         "input_tokens": context.get("total_input_tokens"),

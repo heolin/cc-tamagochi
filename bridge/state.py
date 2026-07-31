@@ -227,6 +227,19 @@ class State:
         return remaining if remaining > 0 else None
 
     def snapshot(self, now: float | None = None) -> dict:
+        """Everything the device is told, and the only thing that crosses BLE.
+
+        Worth reading as a list rather than as code, because this dict *is* the
+        privacy boundary: numbers, three booleans and the names of sprites. The
+        pet's name comes from `buddy_config.json`, which the user wrote
+        themselves. What is conspicuously absent is anything identifying - no
+        paths, no project names, no session ids, no model name, nothing typed
+        and nothing generated.
+
+        `counts` is the one place that has to be trimmed rather than merely
+        copied: `summarise()` also returns the list of project names, which is
+        useful in a log and has no business on a radio.
+        """
         counts = sessions_mod.summarise(self.sessions)
         moment = now if now is not None else time.time()
         game = self.game.view(now or time.time()) if self.game else self._fallback
@@ -253,6 +266,7 @@ class State:
             "seven_day": self._limit("seven_day_pct"),
             "five_hour_reset_in": self._reset_in("five_hour_reset", moment),
             "seven_day_reset_in": self._reset_in("seven_day_reset", moment),
+            # Three numbers, not counts["projects"] - see the docstring.
             "sessions": {
                 "total": counts["total"],
                 "busy": counts["busy"],

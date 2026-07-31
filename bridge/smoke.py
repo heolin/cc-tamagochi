@@ -30,7 +30,7 @@ os.environ["CC_BUDDY_SOCKET"] = "/tmp/cc-buddy-smoke-%d.sock" % os.getpid()
 
 import sessions as sessions_mod  # noqa: E402
 import state as st  # noqa: E402
-from ipc import HookServer  # noqa: E402
+from ipc import ControlServer  # noqa: E402
 from state import State  # noqa: E402
 
 STATUSLINE = os.path.join(HERE, "statusline.py")
@@ -97,7 +97,7 @@ async def collect(events: list[dict]) -> list[dict]:
         seen.append(message)
         return None
 
-    server = HookServer(handler)
+    server = ControlServer(handler)
     await server.start()
     try:
         loop = asyncio.get_running_loop()

@@ -181,12 +181,16 @@ and can be changed without touching code. The pet's name too.
 
 ### How it fits together
 
-```text
-statusLine ─┐
-            ├─▶ bridge ──BLE / Nordic UART──▶ device
-sessions/ ──┘   game + state    ◀──BLE──      screens + buttons
-                buddy.json
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-dark.png">
+    <img src="docs/architecture-light.png" width="900"
+         alt="statusLine and ~/.claude/sessions feed the bridge daemon over a 0600 UNIX socket and a 2-second read-only poll; the bridge runs the game and pushes a snapshot to the M5StickC S3 over BLE every 3 seconds, while taps and tilt come back the same way. No network, no transcripts, no hooks.">
+  </picture>
+</p>
+
+<sup>Regenerate with `python3 tools/diagram.py` after changing the data
+flow.</sup>
 
 The **bridge owns the game**; the device is a view with two buttons. The stick's
 clock starts at 1970, `run.sh` restarts it constantly and nothing survives that
@@ -201,6 +205,49 @@ tool call down. Two read-only sources cover everything:
 | rate limits, tokens, cost, context | the `statusLine` command's stdin |
 | live sessions and busy/idle | `~/.claude/sessions/*.json` |
 | wall clock | sent by the bridge on connect |
+
+### What it can see, and what it cannot
+
+You are pointing this at your own Claude Code, so here is the whole trust story
+in one place. Every claim is one `grep` away, and the code says the same thing
+in `bridge/bridge.py`'s docstring.
+
+**It reads two things.** The numbers Claude Code hands its status line, and
+`~/.claude/sessions/*.json` — an index of which processes are alive and whether
+they are busy. Liveness is confirmed against `/proc/<pid>/stat`.
+
+**It never opens a conversation.** Transcripts live under `~/.claude/projects/`
+and nothing here touches them. Every file the daemon opens, in full — five
+lines, and you can check them yourself:
+
+```console
+$ grep -rn "open(\|read_text" bridge/*.py | grep -v smoke
+bridge/bridge.py:68:        with open(CONFIG_PATH) as handle:          # buddy_config.json
+bridge/sessions.py:70:        with open(f"/proc/{pid}/stat", "rb")      # is this pid alive
+bridge/sessions.py:111:            json.loads(path.read_text())         # a session index file
+bridge/game.py:147:            with open(self.path) as handle:          # buddy.json, read
+bridge/game.py:167:            with open(tmp, "w") as handle:           # buddy.json, written
+```
+
+**It cannot affect a tool call.** This is not a hook. Nothing in Claude Code
+ever waits for the bridge: the status line writes to a socket with a 0.15 s
+timeout and prints its line whatever happens, so a stopped or wedged daemon
+means a stale pet and nothing more.
+
+**Nothing leaves your machine.** The only dependency is `bleak`, there is no
+HTTP client anywhere in `bridge/`, and the daemon's single outbound connection
+is BLE to one hard-coded address. On disk it writes one file, `buddy.json`,
+which holds counters — see `game.Snapshot` for its complete schema.
+
+**No root.** `./deploy.sh service` installs a systemd *user* unit. The local
+socket lives in `$XDG_RUNTIME_DIR` (0700) with mode 0600 on top.
+
+The one honest caveat: **the BLE link is unencrypted and unpaired**, like most
+hobby peripherals. Someone in radio range could connect to the stick while the
+bridge is not, and read what the screen shows — hunger, hearts, tokens, how many
+sessions are open. That is the whole vocabulary; `bridge/state.py::snapshot` is
+the exhaustive list and carries no paths, names or content. They could also send
+the two inputs the device accepts, and award your pet an undeserved petting.
 
 ### Layout
 
@@ -230,7 +277,11 @@ a sprite on disk. It runs happily alongside a live bridge — set
 
 ### Sprites
 
-The mascot art in `device/raw_images/` is pixel art upscaled by a non-integer
+The converted sprites are committed, so this section only matters if you want to
+change the artwork — drop the pack into `device/raw_images/` first, as its
+[README](device/raw_images/README.md) describes.
+
+The mascot art is pixel art upscaled by a non-integer
 factor, which makes two things go wrong if you just resize it. Averaging blurs
 2-colour art into mush, so the converter **samples the centre of each cell**
 instead; and the grid phase differs per frame, so it fits each file to its own
@@ -279,14 +330,18 @@ axes live, which settles both the axis and its sign in one look.
 
 ## Credits
 
-The mascot artwork — all 29 poses in `device/raw_images/`, and the sprites
-converted from them — comes from the **Claude Mascot Pack** by
+The mascot artwork comes from the **Claude Mascot Pack** by
 [getillustrations.com](https://getillustrations.com/illustration-pack/claude-mascot-pack).
 Everything the buddy looks like is their work; this project only rescales it and
 draws it on a small screen.
 
-Check the pack's own terms before reusing the artwork elsewhere or making a copy
-of this repository public — the files here are redistributed as part of it.
+**The source PNGs are not in this repository.** They are licensed to whoever
+downloaded the pack, not to the repo, so `device/raw_images/` ships empty with
+[instructions](device/raw_images/README.md) instead. What is committed is
+`device/sprites/*.spr` — 29 two-colour bitmaps of about 8.8 KB in total, cut
+down to 39 x 34 pixels for a 135 px screen. You need nothing else to run the
+buddy; download the pack only to re-cut or change the artwork, and check its
+terms before reusing it elsewhere.
 
 The protocol groundwork came from Anthropic's
 [claude-desktop-buddy](https://github.com/anthropics/claude-desktop-buddy), which

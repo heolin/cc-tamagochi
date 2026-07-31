@@ -10,6 +10,14 @@
 Read-only, no hooks, no cooperation from the CLI needed. This is where the
 session count and the busy/idle split on the buddy's Claude screen come from.
 
+**This is an index, not a transcript.** The file above is the whole of what
+Claude Code writes here: which process, in which directory, busy or idle. The
+conversations live elsewhere, under `~/.claude/projects/`, and nothing in this
+project opens them - the pet is counting windows, not reading over your
+shoulder. `cwd` is used for one thing, the project name in this module's own
+`__main__` printout; `summarise()` offers it and `state.snapshot()` does not
+take it, so no path ever reaches the stick.
+
 **Files outlive their process.** A crashed or SIGKILLed session leaves its file
 behind, so liveness has to be checked rather than assumed - otherwise the pet
 would show a permanent crowd of sessions that ended days ago.

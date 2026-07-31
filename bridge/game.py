@@ -98,7 +98,14 @@ def _days_between(earlier: str, later: str) -> int:
 
 @dataclass
 class Snapshot:
-    """Everything that must survive a restart."""
+    """Everything that must survive a restart - and everything `buddy.json` is.
+
+    The file this serialises to is the only state the project keeps on disk, and
+    this class is its whole schema: counters, two timestamps and a date string.
+    No usage history, no session ids, no paths, nothing about what the tokens
+    were spent on. Deleting the file loses a pet and nothing else, which is why
+    `buddyctl.py reset` can simply rename it aside.
+    """
 
     debt: float = 0.0
     happiness: float = 0.5

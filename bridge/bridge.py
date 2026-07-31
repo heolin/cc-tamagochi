@@ -11,6 +11,32 @@ anything in the CLI:
 * `sessions.py` is polled on a timer for who is alive.
 
 The buddy is a BLE peripheral; this connects out to it and pushes state.
+
+## What this process can and cannot do
+
+It runs as you, and it watches your Claude Code. That deserves a claim you can
+check rather than take on faith - every line below is one `grep` away:
+
+* **It reads two things.** The usage numbers the status line hands it, and
+  `~/.claude/sessions/*.json` plus `/proc/<pid>/stat` to tell live sessions from
+  leftover files. Transcripts, prompts, tool calls, diffs and file contents are
+  never opened. Every file this package touches is one of five calls to `open()`
+  or `read_text()`; grepping for those two names finds all of them, and the
+  README lists the result.
+* **It writes three.** `buddy.json` beside this file (counters only - see
+  `game.Snapshot`), its log to stderr, and BLE writes to one address.
+* **It sends nothing anywhere else.** The only third-party import in this
+  package is `bleak` - `bridge/pyproject.toml` has no other dependency, and
+  nothing here imports an HTTP client of any kind.
+* **It cannot touch a tool call.** This is not a hook. Claude Code never waits
+  on it, and never asks it anything: the status line writes to a socket with a
+  0.15 s timeout and prints its line whatever happens. A wedged or missing
+  daemon leaves the pet stale and the CLI untouched.
+* **It needs no root.** `./deploy.sh service` installs a systemd *user* unit.
+
+What crosses the radio is the snapshot in `state.snapshot()`: hunger, hearts,
+level, token counts, session counts, pose names. No paths, no project names, no
+prompts, no output. The BLE link itself is unauthenticated - see `ble.py`.
 """
 
 from __future__ import annotations
@@ -26,7 +52,7 @@ import time
 
 from ble import DEFAULT_ADDRESS, BuddyLink
 from game import Game
-from ipc import HookServer
+from ipc import ControlServer
 from state import State
 
 log = logging.getLogger("bridge")
@@ -55,12 +81,20 @@ class Bridge:
         self.game = Game(config)
         self.state = State(config, self.game)
         self.link = BuddyLink(self._on_device_line, self.state.snapshot, address)
-        self.server = HookServer(self._on_message)
+        self.server = ControlServer(self._on_message)
         self._stop = asyncio.Event()
 
     # -- from Claude Code --------------------------------------------------
 
     async def _on_message(self, message: dict) -> None:
+        """Everything that arrives on the local socket lands here.
+
+        Two kinds are understood and the rest are dropped. That is the whole
+        vocabulary of this daemon's local entrance: `usage` is a report, `admin`
+        is a question about the pet. Neither can reach Claude Code, because
+        nothing in this process can - there is no path from here back to the
+        CLI, only to the game and the screen.
+        """
         kind = message.get("kind")
 
         if kind == "usage":
@@ -71,11 +105,18 @@ class Bridge:
         if kind == "admin":
             return self._admin(message)
 
+        # Unknown kinds are logged at debug and ignored. A future field in the
+        # status-line payload should not make the daemon guess.
         log.debug("ignoring message kind %r", kind)
         return None
 
     def _admin(self, message: dict) -> dict:
-        """Commands from buddyctl.py. Replies, unlike the status line."""
+        """Commands from buddyctl.py. Replies, unlike the status line.
+
+        Both actions are confined to the game: `status` reads the pet's own
+        numbers back out, `reset` starts it over after a death. Neither touches
+        anything outside `buddy.json` and the screen.
+        """
         action = message.get("action")
 
         if action == "reset":

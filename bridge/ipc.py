@@ -1,11 +1,36 @@
-"""AF_UNIX server for the hooks.
+"""The daemon's only local entrance: an AF_UNIX socket.
 
-One connection per hook invocation, one JSON line in, at most one JSON line
-back. The handler is an async callable returning a dict to reply with, or None
-to say nothing and close.
+One connection per caller, one JSON line in, at most one JSON line back. The
+handler is an async callable returning a dict to reply with, or None to say
+nothing and close.
 
-The socket is created with mode 0600. Anything that can write to it can approve
-tool calls on your behalf, which is worth more care than the default umask.
+Two callers, and no others:
+
+* `statusline.py`, once per status-line redraw, with `{"kind": "usage", ...}`.
+  It never waits for an answer.
+* `buddyctl.py`, with `{"kind": "admin", "action": "status"|"reset"}`, which
+  does wait.
+
+`bridge.py` ignores every other `kind`, so an unknown message is dropped rather
+than interpreted.
+
+## What writing to this socket can do
+
+Everything that reaches the daemon is a *report about* Claude Code, never a
+command to it. The worst a hostile writer could do is lie about token counts,
+read the pet's stats, or reset the pet - annoying, and confined to the game. It
+cannot approve a tool call, change a permission, read a conversation or reach
+the CLI at all: nothing in this process talks back to Claude Code.
+
+The socket is still created with mode 0600, inside `$XDG_RUNTIME_DIR` which is
+itself 0700 and per-user. Two locks for a small blast radius is the right way
+round; the default umask would have been the wrong one.
+
+An earlier version of this file claimed the socket could "approve tool calls on
+your behalf". That was true of a design that used Claude Code hooks and was
+abandoned before it shipped. The comment outlived the code, which is exactly how
+a security note becomes a lie - if this docstring and `bridge.py::_on_message`
+ever disagree again, the code is the truth.
 """
 
 from __future__ import annotations
@@ -25,7 +50,7 @@ Handler = Callable[[dict], Awaitable[dict | None]]
 MAX_REQUEST = 64 * 1024
 
 
-class HookServer:
+class ControlServer:
     def __init__(self, handler: Handler) -> None:
         self._handler = handler
         self._server: asyncio.Server | None = None

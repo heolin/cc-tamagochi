@@ -6,6 +6,11 @@
 
 Standard library only, so it works without the venv.
 
+Both commands go over the daemon's local socket (`paths.socket_path()`, mode
+0600) and both stay inside the game: `status` reads the pet's numbers back out,
+`reset` starts it over. There is no command here that touches Claude Code,
+because the daemon has none to offer - see `ipc.py`.
+
 Reset goes through the daemon rather than editing `buddy.json` directly. The
 daemon holds the game in memory and saves every thirty seconds, so a file edited
 underneath it would be overwritten within the minute - the fix has to reach the

@@ -7,6 +7,26 @@ the characteristics, not the side that initiates.
 Everything on the wire is UTF-8 JSON, one object per line. Notifications
 fragment at the MTU, so incoming bytes are accumulated until a newline; the
 same is true in the other direction, which is why writes are chunked.
+
+## What is on that wire, and who else could hear it
+
+Plain Nordic UART with no pairing and no bonding, which is what every hobby BLE
+peripheral does and is worth stating rather than implying. Two consequences,
+both accepted deliberately:
+
+* Anyone within a few metres could connect to the stick while this daemon is
+  not, and read the same snapshot the screen shows - hunger, hearts, level,
+  token counts, how many sessions are open. That is the entire vocabulary
+  (`state.snapshot()`); there are no paths, names or content in it, so the worst
+  case is a stranger learning that somebody nearby had a busy afternoon.
+* Anything in range could equally *send* to the stick. The device acts on two
+  events, `input`/`exp` and `input`/`pet`, which award the pet a point and a
+  stroke. The stick has no other capability to abuse: it cannot reach this
+  daemon's machine except by sending those two lines back up.
+
+If that trade is wrong for you, the fix is not in this file - stop the bridge,
+or unplug the stick. Encrypting the link would need pairing support on both
+ends and would protect numbers that are already on a screen on your desk.
 """
 
 from __future__ import annotations
