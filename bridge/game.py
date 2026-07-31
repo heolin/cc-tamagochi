@@ -44,7 +44,9 @@ log = logging.getLogger(__name__)
 STATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "buddy.json")
 
 DEFAULTS = {
-    "hunger": {"tokens_per_hour": 2000, "hours_to_starve": 8},
+    # 12 idle hours from full to starving: a night away should show on the bar
+    # in the morning without the pet having starved outright by breakfast.
+    "hunger": {"tokens_per_hour": 2000, "hours_to_starve": 12},
     "happiness": {
         "petting_reward": 0.30,
         "decay_per_hour": 0.02,

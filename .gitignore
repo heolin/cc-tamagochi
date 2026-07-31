@@ -11,6 +11,12 @@ bridge/buddy.json
 bridge/buddy.json.bak
 bridge/buddy.json.tmp
 
+# Written by ./configure.py before it overwrites the settings. The committed
+# buddy_config.json is the shipped default; a backup of somebody's own answers
+# is theirs, not the repo's.
+bridge/buddy_config.json.bak
+bridge/buddy_config.json.tmp
+
 # Written by device/deploy_app.sh on whichever machine it runs on
 device/backup/
 

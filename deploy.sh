@@ -4,6 +4,7 @@
 #   ./deploy.sh              # sprites, host environment, tests
 #   ./deploy.sh sprites      # convert and upload artwork only
 #   ./deploy.sh bridge       # host venv and tests only
+#   ./deploy.sh config       # name the pet and set the difficulty, interactively
 #   ./deploy.sh service      # run the bridge as a systemd user service
 #   ./deploy.sh app          # install main.py into flash so it runs standalone
 #
@@ -73,6 +74,16 @@ do_bridge() {
 
     say "Tests (no hardware needed)"
     .venv/bin/python smoke.py | tail -3
+}
+
+# --- settings --------------------------------------------------------------
+
+do_config() {
+    say "Naming the pet and setting the difficulty"
+    # System python on purpose: configure.py is stdlib-only so it works before
+    # ./deploy.sh bridge has built the venv - naming your pet should not be
+    # gated on a dependency resolver.
+    python3 "$BRIDGE/configure.py"
 }
 
 # --- status line -----------------------------------------------------------
@@ -161,10 +172,11 @@ EOF
 case "$WHAT" in
     sprites) do_sprites ;;
     bridge)  do_bridge ;;
+    config)  do_config ;;
     app)     do_app "$@" ;;
     service) do_service ;;
     all)     do_sprites; do_bridge; check_statusline ;;
-    *)       echo "usage: $0 [all|sprites|bridge|app|service]" >&2; exit 2 ;;
+    *)       echo "usage: $0 [all|sprites|bridge|config|app|service]" >&2; exit 2 ;;
 esac
 
 if [[ "$WHAT" == "all" ]]; then

@@ -49,7 +49,8 @@ cannot flash firmware.
 | `device/run.sh` | ship `main.py` to RAM and run it — the development cycle |
 | `device/deploy_app.sh` | write `main.py` into flash, for the desk |
 | `device/deploy_sprites.sh` | upload `device/sprites/*.spr` |
-| `./deploy.sh [sprites\|bridge\|app\|service]` | set up either half from a clean checkout |
+| `./deploy.sh [sprites\|bridge\|config\|app\|service]` | set up either half from a clean checkout |
+| `bridge/configure.py` | interactive `buddy_config.json`: name, appetite, difficulty |
 | `bridge/smoke.py` | the whole host-side test suite. No hardware needed |
 | `tools/screenshot.py` | regenerate `docs/screens/*.png` from `device/main.py` |
 

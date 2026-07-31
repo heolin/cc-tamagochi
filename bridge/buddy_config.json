@@ -1,10 +1,10 @@
 {
-  "_comment": "Game constants, merged over the defaults in game.py. Keys starting with an underscore are ignored by the merge, so notes can sit beside the values they describe.",
+  "_comment": "Game constants, merged over the defaults in game.py. Keys starting with an underscore are ignored by the merge, so notes can sit beside the values they describe. `./configure.py` writes this file from four plain-language questions.",
   "name": "KLAUDIUSZ",
   "hunger": {
     "_note": "Tokens that must be spent per hour to keep the bar full, and how many idle hours empty it from full to starving.",
     "tokens_per_hour": 2000,
-    "hours_to_starve": 8
+    "hours_to_starve": 12
   },
   "happiness": {
     "_note": "Petting is always playable; only the reward is rate limited.",
@@ -13,7 +13,7 @@
     "reward_cooldown_minutes": 60
   },
   "life": {
-    "_note": "Settled at midnight: both daily goals met earns half a heart, missing either costs a whole one. Every unattended day is charged separately.",
+    "_note": "Settled at midnight: both daily goals met earns half a heart, missing either costs a whole one. Every unattended day is charged separately. `max_hearts` stays 5 because the device draws five hearts and nothing tells it otherwise.",
     "max_hearts": 5,
     "penalty_missed_goals": 1.0,
     "reward_met_goals": 0.5

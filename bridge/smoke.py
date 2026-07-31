@@ -4,9 +4,10 @@
     python3 smoke.py
 
 Covers the path a real status line takes - stdin, socket, state, snapshot -
-plus the two behaviours that are easy to get subtly wrong: absent rate limits
-must stay absent rather than becoming a confident 0, and dead sessions must not
-be counted.
+plus the behaviours that are easy to get subtly wrong: absent rate limits must
+stay absent rather than becoming a confident 0, dead sessions must not be
+counted, and the configurator's two unit conversions (a day's tokens to an
+hour's appetite, days of neglect to hearts per day) must not drift or invert.
 
 Deliberately does not import `bridge.py`, which pulls in bleak.
 """
@@ -28,6 +29,7 @@ sys.path.insert(0, HERE)
 # subprocesses this spawns.
 os.environ["CC_BUDDY_SOCKET"] = "/tmp/cc-buddy-smoke-%d.sock" % os.getpid()
 
+import configure  # noqa: E402
 import sessions as sessions_mod  # noqa: E402
 import state as st  # noqa: E402
 from ipc import ControlServer  # noqa: E402
@@ -245,6 +247,60 @@ async def main() -> int:
 
     stale = sessions_mod.read_sessions(now=time.time() + 10 * 3600)
     check("stale sessions are dropped", stale == [], f"got {len(stale)}")
+
+    print("\n-- 8. the configurator's arithmetic --")
+    # The two conversions in configure.py are the reason it exists, and both are
+    # the kind of thing that can invert or drift by a factor of 24 without
+    # anything looking wrong until a pet starves in an afternoon.
+    # The comma cuts both ways: a thousands separator in one convention, a
+    # decimal point in another, and both get typed into this prompt.
+    for raw, expected in (("50k", 50_000), ("1.2M", 1_200_000), ("48000", 48_000),
+                          ("50 000", 50_000), ("50,000", 50_000), ("1,5k", 1_500),
+                          ("1.5k", 1_500)):
+        try:
+            got = configure.parse_tokens(raw)
+        except ValueError as exc:
+            got = f"rejected: {exc}"
+        check(f"parse_tokens({raw!r})", got == expected, f"got {got!r}")
+
+    for raw in ("abc", "5", ""):
+        rejected = False
+        try:
+            configure.parse_tokens(raw)
+        except ValueError:
+            rejected = True
+        check(f"parse_tokens rejects {raw!r}", rejected)
+
+    answers = {"name": "TESTNIK", "daily_tokens": 120_000,
+               "hours_to_starve": 12, "days_of_neglect": 10}
+    written = configure.apply({}, answers)
+
+    check("daily target becomes an hourly appetite",
+          written["hunger"]["tokens_per_hour"] == 5000,
+          f"got {written['hunger']['tokens_per_hour']}")
+    check("days of neglect become a per-day penalty",
+          written["life"]["penalty_missed_goals"] == 0.5,
+          f"got {written['life']['penalty_missed_goals']}")
+    check("five hearts, always - the device draws five",
+          written["life"]["max_hearts"] == configure.HEARTS,
+          f"got {written['life']['max_hearts']}")
+    check("recovery stays half the penalty",
+          written["life"]["reward_met_goals"] == 0.25,
+          f"got {written['life']['reward_met_goals']}")
+
+    # Reading the file back must offer the same answers, or the second run of
+    # the configurator would quietly propose different defaults than the first
+    # one wrote.
+    check("answers survive a round trip", configure.current(written) == answers,
+          f"got {configure.current(written)}")
+
+    # A config file is allowed to be partial, and the game fills the rest in
+    # from DEFAULTS. The questions have to do the same or a missing section
+    # would read as zero.
+    check("a missing section falls back to the game's defaults",
+          configure.current({}) == {"name": "KLAUDIUSZ", "daily_tokens": 48_000,
+                                    "hours_to_starve": 12, "days_of_neglect": 5},
+          f"got {configure.current({})}")
 
     failed = [r for r in results if not r[1]]
     print(f"\n== {len(results) - len(failed)}/{len(results)} passed ==")

@@ -51,9 +51,11 @@ tests. It finishes by printing a `statusLine` block — **add it to
 This is the only way the buddy learns how many tokens you have spent and how
 much of your rate limit is left; those numbers exist nowhere else on disk.
 
-Then start the bridge as a background service, and put the app on the stick:
+Then name the pet, start the bridge as a background service, and put the app on
+the stick:
 
 ```bash
+./deploy.sh config               # four questions, with recommendations
 ./deploy.sh service              # runs at login, restarts on failure
 cd device && ./deploy_app.sh     # so the stick runs without a terminal
 ```
@@ -67,6 +69,32 @@ To survive logouts and reboots, allow the service to linger:
 ```bash
 sudo loginctl enable-linger $USER
 ```
+
+### Running the service
+
+It is a systemd **user** unit, so none of this needs root:
+
+```bash
+systemctl --user status cc-tamagochi     # is it up, is it connected
+journalctl --user -u cc-tamagochi -f     # follow the log
+systemctl --user restart cc-tamagochi    # after any change under bridge/
+systemctl --user disable --now cc-tamagochi
+```
+
+**A restart is what applies a change.** The daemon loads `buddy_config.json`
+once at startup and holds the game in memory, so both editing the settings and
+editing the code leave the running pet on the old rules until you restart it.
+`./deploy.sh service` re-installs the unit file but will *not* restart a service
+that is already active — it is `enable --now`, which does nothing to something
+already running.
+
+Nothing is lost in a restart: `buddy.json` is written every 30 seconds and read
+back on startup, so hunger, hearts and level carry across. The stick shows the
+pet as offline for a second or two and picks up again on the next heartbeat.
+
+Changes to `device/main.py` are a different cycle entirely — `device/run.sh` for
+a quick try, `device/deploy_app.sh` to write it to flash. The bridge does not
+need to know.
 
 ## Using it
 
@@ -96,8 +124,8 @@ tokens you have spent today.
 You do not feed it directly — **you feed it by working**. Every hour adds 2000
 tokens to its appetite, and every token you spend in Claude Code pays that down.
 
-`to feed` is how many tokens would fill the bar right now. Eight idle hours empty
-it completely, which is why it is always hungry in the morning.
+`to feed` is how many tokens would fill the bar right now. Twelve idle hours
+empty it completely, which is why it is always hungry in the morning.
 
 <br clear="right">
 
@@ -164,7 +192,7 @@ If it runs out of hearts it dies, and stays dead until you bring it back:
 
 | | |
 |---|---|
-| Hunger | +2000 tokens of appetite an hour; spending tokens feeds it. Empty after 8 idle hours |
+| Hunger | +2000 tokens of appetite an hour; spending tokens feeds it. Empty after 12 idle hours |
 | Happiness | +30% per petting, once an hour. −2% an hour otherwise |
 | Hearts | 5. Both daily goals met at midnight: +½. Either missed: −1 |
 | Daily goals | feed it at least once, pet it at least once |
@@ -174,6 +202,37 @@ If it runs out of hearts it dies, and stays dead until you bring it back:
 
 Every number here lives in [`bridge/buddy_config.json`](bridge/buddy_config.json)
 and can be changed without touching code. The pet's name too.
+
+### Making it yours
+
+The defaults suit a steady day of ordinary use. If yours is not that, the
+configurator asks four questions in plain language and does the arithmetic:
+
+```bash
+./deploy.sh config          # or: python3 bridge/configure.py
+python3 bridge/configure.py --show    # what it is set to now
+```
+
+| It asks | It sets | Recommended |
+|---|---|---|
+| What is it called? | `name` | `KLAUDIUSZ` |
+| Tokens on a normal day | `hunger.tokens_per_hour` — the daily figure ÷ 24 | 48k a day |
+| Idle hours from full to starving | `hunger.hours_to_starve` | 12 h |
+| Days of neglect it should survive | `life.penalty_missed_goals` — 5 hearts ÷ that many days | 5 days |
+
+It reads today's real token count from a running bridge and shows it beside the
+question, so the appetite can be anchored on your own day rather than on mine.
+Nothing is written until you confirm a plain-English summary of the result, and
+the previous file is kept as `buddy_config.json.bak`.
+
+Two things it deliberately does not offer. **The number of hearts**: the device
+draws five and takes no argument, so a six-heart pet would show five and lie
+about its own health. **Anything about levels or petting**: those are in the
+same file, they are just further from the questions anyone actually has.
+
+The bridge reads the file once, at startup — `systemctl --user restart
+cc-tamagochi` after changing it. The pet itself lives in `buddy.json` and
+carries on across the change; only the rules move.
 
 ---
 
@@ -257,6 +316,7 @@ the two inputs the device accepts, and award your pet an undeserved petting.
 | `bridge/game.py` | hunger, happiness, hearts, levels, persistence |
 | `bridge/state.py` | usage aggregation, mood and pose selection |
 | `bridge/statusline.py` | one shot per prompt redraw, standard library only |
+| `bridge/configure.py` | four questions to `buddy_config.json`, no venv needed |
 | `tools/sprite_convert.py` | PNG → the device's sprite format |
 | `tools/screenshot.py` | the images in this README, drawn by the real code |
 | `tools/*_probe.py` | what this board can actually do, measured |
@@ -267,9 +327,9 @@ the two inputs the device accepts, and award your pet an undeserved petting.
 cd bridge && python3 smoke.py
 ```
 
-29 checks, no hardware: the status-line path end to end, usage aggregation, mood
-and level selection, the daily rollover, and that every pose the code names has
-a sprite on disk. It runs happily alongside a live bridge — set
+49 checks, no hardware: the status-line path end to end, usage aggregation, mood
+and level selection, the daily rollover, the configurator's arithmetic, and that
+every pose the code names has a sprite on disk. It runs happily alongside a live bridge — set
 `CC_BUDDY_SOCKET` and it uses its own socket.
 
 `tools/screenshot.py` is the other useful check: it renders every screen from
